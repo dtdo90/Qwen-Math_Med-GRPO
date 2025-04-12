@@ -1,4 +1,4 @@
-# Qwen 2.5 Math + Medical CoT Enhanced Model with RAG & Tool Use
+# Qwen 2.5 Math and Medical CoT Model with RAG & Tool Use
 
 This repository hosts a fine-tuned version of the [Qwen 2.5 3B Instruct](https://huggingface.co/Qwen) model that has undergone specialized training and enhancements for improved reasoning and real-world application. The model is optimized for mathematical reasoning and medical chain-of-thought tasks, and is equipped with Retrieval-Augmented Generation (RAG) and tool-calling capabilities.
 
@@ -17,8 +17,8 @@ This project builds upon the base Qwen 2.5 3B Instruct model and enhances it in 
 
 ## 🔧 Features
 
-- ✅ **Enhanced Math Reasoning** – Optimized through RL with GRPO for accuracy and step-by-step logic.
-- ✅ **Medical Domain Chain-of-Thought** – Finetuned to provide transparent and multi-step explanations in the medical domain.
-- ✅ **RAG (Retrieval-Augmented Generation)** – Integrates external knowledge sources to ground responses with factual information.
-- ✅ **Tool-Calling** – Model can interface with built-in tools and functionalities.
+- **Enhanced Math Reasoning** – Optimized through RL with GRPO for accuracy and step-by-step logic.
+- **Medical Domain Chain-of-Thought** – Finetuned to provide transparent and multi-step explanations in the medical domain.
+- **RAG (Retrieval-Augmented Generation)** – Integrates external knowledge sources to ground responses with factual information.
+- **Tool-Calling** – Model can interface with built-in tools and functionalities.
 
