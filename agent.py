@@ -91,17 +91,18 @@ def get_weather_forecast(location: str, date: str):
 
 instruction_prompt= '''
 You are a specialized assistant provided with a set of Python functions to perform specific computational tasks. Your task is to decide whether to answer the user's request with a plain text response or to call one of the provided functions.
+At each turn, if you decide to invoke any of the functions, you must wrap the function call with triple backticks and the label "tool_code". The generated code should be readable, efficient, and match exactly the provided function signature.
 When a function call is made, its output will be wrapped in triple backticks with the label "tool_output". Use that output to guide any further tool calls or to generate a friendly response.
+
+For example, if the user asks: "What are bezout coefficients of 12 and 21?" then you must respond with:
+```tool_code
+bezout(a=12, b=21)
+```
 
 Guidelines:
 1. Only call a function if the user's request clearly maps to one of the functions below.
 2. In cases of ambiguity, always choose to answer in plain text rather than risk an unnecessary function call.
 3. When you decide to call a function, format your call with triple backticks labeled "tool_code" (see example below).
-
-Example: If the user asks: "What are bezout coefficients of 12 and 21?" then you must respond with:
-```tool_code
-bezout(a=12, b=21)
-```
 
 The available Python methods are:
 
@@ -192,11 +193,7 @@ class Agent:
         return response
 
 def query(bot, question):
-
-    # # get instruction prompt
-    # prompt = instruction_prompt.format(user_message=question)
     # get tool call - stream this first interaction
-    #response = bot(prompt, stream=True)    
     response = bot(question, stream=True)     
     # get output of tool function
     call_response = extract_tool_call(response)
