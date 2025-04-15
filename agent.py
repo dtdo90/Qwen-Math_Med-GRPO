@@ -1,11 +1,10 @@
 import re
 import math
 from geopy.geocoders import Nominatim
-from pydantic import BaseModel, Field
 import requests
 
-import unsloth, torch
-from transformers import AutoTokenizer, TextStreamer
+import unsloth
+from transformers import TextStreamer
 from unsloth import FastLanguageModel
 
 
@@ -91,13 +90,15 @@ def get_weather_forecast(location: str, date: str):
 
 
 instruction_prompt= '''
-At each turn, if you decide to invoke any of the functions, you must wrap the function call with triple backticks and the label "tool_code". You are given several Python functions that you can use, and you are only allowed to call these functions. The generated code should be readable, efficient, and match exactly the provided function signature. 
-
+You are a specialized assistant provided with a set of Python functions to perform specific computational tasks. Your task is to decide whether to answer the user's request with a plain text response or to call one of the provided functions.
 When a function call is made, its output will be wrapped in triple backticks with the label "tool_output". Use that output to guide any further tool calls or to generate a friendly response.
 
-Your task is to determine which of the following functions to call based solely on the user's request. If the request refers to computing the Bezout coefficients, then your answer must be exactly a function call to `bezout` with the appropriate parameters, wrapped as shown below.
+Guidelines:
+1. Only call a function if the user's request clearly maps to one of the functions below.
+2. In cases of ambiguity, always choose to answer in plain text rather than risk an unnecessary function call.
+3. When you decide to call a function, format your call with triple backticks labeled "tool_code" (see example below).
 
-For example, if the user asks: "What are bezout coefficients of 12 and 21?" then you must respond with:
+Example: If the user asks: "What are bezout coefficients of 12 and 21?" then you must respond with:
 ```tool_code
 bezout(a=12, b=21)
 ```
@@ -131,13 +132,12 @@ def solve(a,b,m):
       m: The modulus of the equation
     """
 ```
-
-User: {user_message}
 '''
 
 
+
 class Agent:
-    def __init__(self, base_model_id="Qwen/Qwen2.5-3B-Instruct", system_message="", stream_output=True):
+    def __init__(self, base_model_id="Qwen/Qwen2.5-3B-Instruct", system_message=instruction_prompt, stream_output=True):
         self.messages = []
         self.stream_output = stream_output
         self.base_model_id=base_model_id
@@ -147,10 +147,10 @@ class Agent:
 
     def load_model(self):
         model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=self.base_model_id,
-        max_seq_length=1024,         
-        load_in_4bit=True,           
-        )
+            model_name=self.base_model_id,
+            max_seq_length=2048,         
+            load_in_4bit=True,           
+            )
         return model, tokenizer
     
     def __call__(self, message, stream=None):
@@ -193,10 +193,11 @@ class Agent:
 
 def query(bot, question):
 
-    # get instruction prompt
-    prompt = instruction_prompt.format(user_message=question)
+    # # get instruction prompt
+    # prompt = instruction_prompt.format(user_message=question)
     # get tool call - stream this first interaction
-    response = bot(prompt, stream=True)         
+    #response = bot(prompt, stream=True)    
+    response = bot(question, stream=True)     
     # get output of tool function
     call_response = extract_tool_call(response)
     if call_response is None:
@@ -209,9 +210,14 @@ def query(bot, question):
 
 
 if __name__=="__main__":
-    print("What can I help you today?")
-    # read user input
-    user_input = input(">> ")
-    # initialize agent
+    print("Initializing agent ...")
     bot = Agent()
-    answer = query(bot, user_input)
+    print("What can I help you with today? (Type 'exit' to quit)")
+    while True: 
+        # read user input
+        user_input = input(">> ")
+        if user_input.strip().lower() == "exit":
+            print("Goodbye!")
+            break
+        answer = query(bot, user_input)
+        print(answer)
