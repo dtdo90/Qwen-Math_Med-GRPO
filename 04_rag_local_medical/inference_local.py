@@ -1,12 +1,84 @@
-import unsloth, torch, os
+# !pip install pypdf langchain-community chromadb sentence-transformers
+
+import unsloth, torch, os, tiktoken
 from unsloth import FastLanguageModel
 from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.document_loaders import RecursiveUrlLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader
+
 from transformers import AutoTokenizer
 from langchain_community.vectorstores import FAISS
 from transformers import TextStreamer
+
+
 import numpy as np
 import gc
 from pathlib import Path
+
+def count_tokens(text, model="cl100k_base"):
+    """ Count the number of tokens in the text using tiktoken"""
+    encoder = tiktoken.get_encoding(model)
+    return len(encoder.encode(text))
+
+
+def split_documents(document_path):
+    """ Split document into smaller chunks to improve retrieval
+            (1) Use RecursiveCharacterTextSplitter with tiktoken to create semantically meaningful chunks
+            (2) Ensure chunks are appropriately sized for embedding and retrieval
+            (3) Count total chunks and total tokens
+        Returns:
+            list of split document objects
+    """
+    # load document
+    loader=PyPDFLoader(document_path)
+    pages=loader.load()
+
+    # initialize tiktokken splitter
+    text_splitter=RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+        chunk_size=2000,
+        chunk_overlap=100
+    )
+    # split documents into chunks
+    split_docs=text_splitter.split_documents(pages)
+    print(f"Created {len(split_docs)} chunks from documents")
+
+    # count total tokens
+    total_tokens=0
+    for doc in split_docs:
+        total_tokens+= count_tokens(doc.page_content)
+    print(f"Total tokens in split documents: {total_tokens}")
+
+    return split_docs
+
+def create_vectorstore(splits):
+    """ Create vector store from the chunks using FAISS
+        Return:
+            FAISS: a vector store containing the embedded documents
+    """
+    print("Creating FAISS vector store ...")
+    # initialize text embedding model
+    embeddings = HuggingFaceEmbeddings(
+        model_name="BAAI/bge-base-en-v1.5",
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True}
+    )
+    
+    # create vector store from documents using FAISS
+    persist_path = os.path.join(os.getcwd(), "local_vectorstore")
+    vectorstore = FAISS.from_documents(
+        documents=splits,
+        embedding=embeddings
+    )
+    
+    print("FAISS vector store created successfully!")
+    
+    # save it
+    vectorstore.save_local(persist_path)
+    print("FAISS vector store was persisted to ", persist_path)
+
+    return vectorstore
+
 
 def load_model_tokenizer_ft(base_model_id="Qwen/Qwen2.5-3B-Instruct", adapter_path="grpo_lora"):
     """Load the finetuned model with proper error handling and validation"""
@@ -50,9 +122,7 @@ def cleanup_resources(model=None):
     torch.cuda.empty_cache()
     gc.collect()
 
-# Use SentenceTransformer as a LangChain-compatible embedding function
-embedding = HuggingFaceEmbeddings(model_name="BAAI/bge-base-en-v1.5")
-
+# global variable names
 prompt_names=["math", "medical", "others"]
 prompt_template_math=(
     "You are an expert in solving math problems. "
@@ -69,14 +139,10 @@ prompt_template_others = (
     "You first think through the reasoning process step-by-step in your mind and then provide the user with the answer."
 )
 
-prompt_templates = [
-    prompt_template_math,
-    prompt_template_medical,
-    prompt_template_others,
-]
-
+prompt_templates = [prompt_template_math, prompt_template_medical, prompt_template_others]
 
 def select_prompt(model, tokenizer, question):
+    """Select prompt type by the underlying LLM"""
     # system_message as few-shot prompt
     system_message = """\
     You are a text classifier.  Given an input text, respond with exactly one word: math, medical, or others.  Output only that word—no extra text.
@@ -124,56 +190,48 @@ def select_prompt(model, tokenizer, question):
     return response
 
 def inference(model, tokenizer, question):
-    """Run inference with proper error handling and resource management"""
     # dictionary to convert question type to temperature and prompt template 
     prompt_type_temperature={"math": 0.1, "medical": 0.4, "others": 0.7}
     prompt_type_system={"math": prompt_template_math, "medical": prompt_template_medical, "others": prompt_template_others}
 
+    # 1. Get context 
     # get system prompt and temperature from question type
     question_type=select_prompt(model,tokenizer,question)
     system_prompt=prompt_type_system[question_type]
     temperature=prompt_type_temperature[question_type]
 
     # vector store path
-    vector_store_path = os.path.join(os.getcwd(), "cancer_vectorstore")
-    
-    # Initialize retriever with error handling
-    try:
-        # Load FAISS vector store
-        vectorstore = FAISS.load_local(
-            vector_store_path,
-            embeddings=embedding,
-            allow_dangerous_deserialization=True  # Safe since we created the vector store
-        )
-        
-        # Get documents with similarity scores
-        docs_with_scores = vectorstore.similarity_search_with_score(question, k=2)
-        
-        # Filter documents based on distance threshold
-        MAX_DISTANCE = 1  # Maximum acceptable L2 distance
-        relevant_docs = []
-        
-        print("\nDocument distances (lower is better):")
-        for doc, score in docs_with_scores:
-            if score <= MAX_DISTANCE:
-                relevant_docs.append(doc)
-                print(f"Distance: {score:.4f} - Document selected")
-            else:
-                print(f"Distance: {score:.4f} - Document too far")
-        
-        if not relevant_docs:
-            print("Warning: No documents found within distance threshold. Proceeding without context.")
-            context = ""
+    vector_store_path=os.path.join(os.getcwd(), "local_vectorstore")
+
+    # load FAISS vector store
+    vectorstore=FAISS.load_local(
+        vector_store_path,
+        embeddings=HuggingFaceEmbeddings(model_name="BAAI/bge-base-en-v1.5"),
+        allow_dangerous_deserialization=True # safe since we created the local vector store
+    )
+    # get docs with similarity scores
+    docs_with_scores=vectorstore.similarity_search_with_score(question,k=2)
+
+    # filter relevant documents based on distance threshold 
+    MAX_DISTANCE=1
+    relevant_docs=[]
+    print("\nDocument distances (lower is better):")
+    for doc, score in docs_with_scores:
+        if score<=MAX_DISTANCE:
+            relevant_docs.append(doc)
+            print(f"Distance: {score:.4f} - Document selected")
         else:
-            context = "\n\n".join([d.page_content for d in relevant_docs])
-            print(f"\nUsing {len(relevant_docs)} relevant documents for context")
+            print(f"Distance: {score:.4f} - Document too far")
 
-    except Exception as e:
-        print(f"Error retrieving documents: {str(e)}")
-        relevant_docs = []
-        context = ""
+    # get combined context
+    if not relevant_docs:
+        print("Warning: No documents within distance threshold. Proceeding without context.")
+        context=""
+    else:
+        context="\n\n".join([d.page_content for d in relevant_docs])
+        print(f"\nUsing {len(relevant_docs)} relevant documents for context")
 
-    # Prepare messages 
+    # 2. Prepare messages
     template = (
         "Use the following pieces of context to answer the question at the end. "
         "If the context is None or empty, simply answer the question based on your knowledge. "
@@ -192,51 +250,47 @@ def inference(model, tokenizer, question):
         {"role": "assistant", "content": "Let me solve this step by step.\n<think>"}
     ]
 
-    # Generate response with error handling
+    # 3. Generate response with error handling
     try:
-        inputs = tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True)
-        model_inputs = tokenizer([inputs], return_tensors="pt").to(model.device)
+        inputs=tokenizer.apply_chat_template(messages, tokenize=False, continue_final_message=True)
+        model_inputs=tokenizer([inputs], return_tensors="pt").to(model.device)
         
-        generated_ids = model.generate(
+        generated_ids=model.generate(
             **model_inputs,
             max_new_tokens=1024,
             temperature=temperature,
-            streamer=TextStreamer(tokenizer, skip_special_tokens=True),
-            pad_token_id=tokenizer.pad_token_id
+            streamer=TextStreamer(tokenizer, skip_special_tokens=True)
         )
-        
         # exclude input from the model's answer
-        generated_ids = [
-            output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+        generated_ids=[
+            output_ids[len(input_ids):] for input_ids,output_ids in zip(model_inputs.input_ids, generated_ids)
         ]
-        response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]            
+        # batch decode for a list
+        response=tokenizer.batch_decode(generated_ids,skip_special_tokens=True)
+        response = response[0] # only 1 question
         return response
-
     except Exception as e:
         print(f"Error during generation: {str(e)}")
         return f"Error: {str(e)}"
-
-if __name__ == "__main__":
+    
+if __name__=="__main__":
+    # try-finally block to clean up space when exiting the code
     try:
-        model, tokenizer = load_model_tokenizer_ft()
+        model, tokenizer=load_model_tokenizer_ft()
         print("Type your question (or exit to quit)")
-        
+        # get input from user
         while True:
             try:
-                question = input(">> ").strip()
+                question=input(">> ").strip() # exlude trailing white spaces
                 if not question:
                     continue
-                if question.lower() == "exit":
+                if question.lower()=="exit":
                     break
-                    
-                response = inference(model, tokenizer, question)
-                
-            except KeyboardInterrupt:
-                print("\nExiting...")
-                break
+
+                response=inference(model, tokenizer,question)
             except Exception as e:
                 print(f"Error: {str(e)}")
                 continue
-                
-    finally: # free up memory after exiting the loop
+    finally: # free memory after exiting the loop
         cleanup_resources(model)
+
