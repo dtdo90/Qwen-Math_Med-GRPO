@@ -1,3 +1,5 @@
 grpo_lora/*
 qwen-grpo-deepseek/*
 agent_tool_call.ipynb
+.venv/
+.vscode/
