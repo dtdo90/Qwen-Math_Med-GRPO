@@ -18,9 +18,9 @@ def bs4_extractor(html: str) -> str:
     # parse html: use BeautifulSoup with "lxml" parser to create structured object from raw html
     soup = BeautifulSoup(html, "lxml")
 
-    # Try multiple content selectors
+    # Content selection: multiple content selectors
     content_selectors = [
-        "article.md-content__inner",  # Original selector
+        "article.md-content__inner",  # article selector,  content within markdown-style documentation
         "div#main-content",           # Common content container
         "main",                       # Main content area
         "div.content",                # Generic content div
@@ -28,7 +28,7 @@ def bs4_extractor(html: str) -> str:
     ]
     
     content = None
-    for selector in content_selectors:
+    for selector in content_selectors: # iterate over selectors
         main_content = soup.select_one(selector)
         if main_content:
             content = main_content.get_text()
