@@ -20,7 +20,7 @@ This project builds upon the Qwen 2.5 3B Instruct model and enhances it in two m
 
 
 ## Inference
-The model is equipped with Retrieval-Augmented Generation (RAG) and tool-calling capabilities.
+The model is equipped with Retrieval-Augmented Generation (RAG) and agentic capabilities.
 
 ### 1. Prompt Routing
 For a Chain-of-Thought (CoT) model with specialized knowledge domains, it's crucial to identify the appropriate knowledge domain for each input question. This process, known as prompt routing, ensures the model applies the correct expertise and reasoning framework.
@@ -28,6 +28,7 @@ For a Chain-of-Thought (CoT) model with specialized knowledge domains, it's cruc
 We implement two prompt routing approaches:
 1. **Embedding-Based Routing**: Uses semantic similarity to match questions with appropriate knowledge domains
 2. **LLM-Based Routing**: Leverages the model's own understanding to determine the most relevant domain
+
 ➡️ **Code:** `03_inference_prompt_routing.ipynb`
 
 
