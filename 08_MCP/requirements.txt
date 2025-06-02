@@ -1,0 +1,7 @@
+# Core dependencies
+mcp>=0.1.0
+torch>=2.0.0
+nest-asyncio>=1.5.8
+
+# Utility dependencies
+requests>=2.31.0 
