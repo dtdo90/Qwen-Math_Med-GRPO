@@ -46,3 +46,18 @@ The model can interact with both built-in tools and external APIs to extend its 
     *   ➡️ **Code:** `06_agent_basic.py`
 2. **Advanced CoT Agent:** Combines prompt routing, tool-use decision-making, and CoT formatting with the fine-tuned model.
     *   ➡️ **Code:** `07_agent_cot.py`
+
+### 4. Model Context Protocol (MCP) Integration
+The model can interact with specialized MCP servers for enhanced functionality:
+1. **Math Server**: Handles mathematical calculations including Bezout coefficients and linear congruence equations
+2. **Weather Server**: Provides weather information
+3. **Airbnb Server**: Accesses Airbnb data
+
+The system features:
+- Automatic question classification (math/medical/others)
+- Multiple MCP server integration
+- Streaming output
+- LoRA fine-tuned model
+- Async server communication
+
+➡️ **Code:** `08_MCP/` (see directory's README.md for setup and usage instructions)
