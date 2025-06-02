@@ -115,7 +115,7 @@ User: "What are Bezout coefficients of 12 and 21?"
 You: ```tool_code
 bezout(a=12, b=21)
 ```
-You will receive:
+You will receive the output by user:
 ```tool_output
 (2, -1)
 ```

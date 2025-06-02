@@ -5,3 +5,4 @@ agent_tool_call.ipynb
 .vscode/
 08_mcp_basic.py
 09_mcp_tool.py
+.env

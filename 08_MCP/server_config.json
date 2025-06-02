@@ -1,0 +1,22 @@
+{
+    "mcpServers": {
+        "airbnb": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@openbnb/mcp-server-airbnb",
+                "--ignore-robots-txt"
+            ],
+            "env": {}
+        },
+        "math": {
+            "command": "uv",
+            "args": ["run", "math_server.py"]
+        },
+        "weather": {
+            "command": "uv",
+            "args": ["run", "weather_server.py"]
+        }
+    }
+}
+  
