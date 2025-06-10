@@ -139,7 +139,7 @@ class Agent:
         # Load the base model with memory optimization
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.base_model_id,
-            max_seq_length=4200,
+            max_seq_length=4096,
             load_in_4bit=True,
             device_map="auto"
         )

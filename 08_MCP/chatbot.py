@@ -31,7 +31,7 @@ prompt_template_others = (
 )
 
 class MCP_Chatbot:
-    def __init__(self,base_model_id="Qwen/Qwen2.5-3B-Instruct", adapter_path="grpo_lora", stream_output=True):
+    def __init__(self,base_model_id="Qwen/Qwen2.5-3B-Instruct", adapter_path="../grpo_lora", stream_output=True):
         # initialize session and client objects
         self.exit_stack=AsyncExitStack()
         self.available_tools=[]
@@ -52,6 +52,7 @@ class MCP_Chatbot:
         # Load the base model with memory optimization
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=self.base_model_id,
+            max_seq_length=4096,
             load_in_4bit=True,
             device_map="auto"
         )
@@ -226,6 +227,35 @@ class MCP_Chatbot:
                             # Try to parse as JSON first
                             try:
                                 result_json = json.loads(result[0])
+                                
+                                # Filter Airbnb search results
+                                if func_name == "airbnb_search" and isinstance(result_json, dict):
+                                    filtered_results = []
+                                    if "searchResults" in result_json:
+                                        for listing in result_json["searchResults"]:
+                                            filtered_listing = {}
+                                            
+                                            # Get description
+                                            if "demandStayListing" in listing and "description" in listing["demandStayListing"]:
+                                                filtered_listing["description"] = listing["demandStayListing"]["description"]["name"]["localizedStringWithTranslationPreference"]
+                                            
+                                            # Get room details
+                                            if "structuredContent" in listing:
+                                                filtered_listing["room_details"] = listing["structuredContent"]["primaryLine"]
+                                            
+                                            # Get price
+                                            if "structuredDisplayPrice" in listing:
+                                                price_info = listing["structuredDisplayPrice"]["primaryLine"]["accessibilityLabel"]
+                                                filtered_listing["price"] = price_info
+                                            
+                                            # Get rating and reviews
+                                            if "avgRatingA11yLabel" in listing:
+                                                filtered_listing["rating_and_reviews"] = listing["avgRatingA11yLabel"]
+                                            
+                                            filtered_results.append(filtered_listing)
+                                        
+                                        result_json = {"listings": filtered_results}
+                                
                                 return f'```tool_output\n{json.dumps(result_json, indent=2)}\n```'
                             except json.JSONDecodeError:
                                 # If not JSON, return as is
@@ -254,7 +284,7 @@ class MCP_Chatbot:
             "Question: What is the capital of France?\n"
             "Response: no_tool"
         )
-        user_message = f"Now classify this question:\n{question}\nCategory: "
+        user_message = f"Now classify this question:\n{question}\nResponse: "
         messages = [
             {"role": "system", "content": system_message},
             {"role": "user", "content": user_message}
@@ -264,7 +294,7 @@ class MCP_Chatbot:
             tokenize=False,
             add_generation_prompt=True
         )
-        inputs = self.tokenizer([prompt], return_tensors="pt")
+        inputs = self.tokenizer([prompt], return_tensors="pt").to(self.model.device)
         generated_ids = self.model.generate(
             **inputs,
             max_new_tokens=2,
@@ -282,7 +312,7 @@ class MCP_Chatbot:
             tokenize=False,
             add_generation_prompt=True
         )
-        model_inputs = self.tokenizer(prompt, return_tensors="pt")
+        model_inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)    
         streamer = TextStreamer(self.tokenizer, skip_special_tokens=True) if stream else None
 
         generated_ids = self.model.generate(
